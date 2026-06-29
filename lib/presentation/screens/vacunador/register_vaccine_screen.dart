@@ -106,15 +106,19 @@ Future<void> _guardarRegistro() async {
   }
 
   final connectivityResult = await Connectivity().checkConnectivity();
+  
+  print("Conectividad: $connectivityResult");
+  print("Tipo: ${connectivityResult.runtimeType}");
+  
   final isOffline = connectivityResult.contains(ConnectivityResult.none);
+  print("¿Está offline?: $isOffline");
+
   final user = Supabase.instance.client.auth.currentUser;
 
 if (user == null) {
   throw Exception('Usuario no autenticado');
 }
 
-final sectorId =
-    await _userRepository.getUserSector(user.id);
 
   if (isOffline) {
     final mapaVacunacion = {
@@ -129,24 +133,27 @@ final sectorId =
       'latitud': _posicionActual!.latitude,
       'longitud': _posicionActual!.longitude,
       'foto_path': _imagenMascota!.path,
-      'sincronizado': false,
       'fecha_hora': DateTime.now().toIso8601String(),
-      'sector_id': sectorId,
+      'vacunador_id': user.id,
+      'sector_id': null,
+      'sincronizado': false,
+      
     };
-
-    final box = Hive.box('vacunaciones_offline');
-    await box.add(mapaVacunacion);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sin conexión. Guardado localmente para sincronizar luego.'),
-      ),
-    );
-
-    _limpiarFormulario();
-    return;
+    try {
+        print("ENTRANDO AL MODO OFFLINE");
+        final box = Hive.box('vacunaciones_offline');
+        await box.add(mapaVacunacion);
+        print("Registros en Hive: ${box.length}");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Guardado localmente'),
+          ),
+        );
+        _limpiarFormulario();
+      } catch (e) {
+        print("ERROR HIVE: $e");
+      }
+      return;
   }
 
   try {
@@ -156,6 +163,7 @@ final sectorId =
     if (user == null) {
       throw Exception('No existe un usuario autenticado.');
     }
+    // Solo si hay conexion a internet
     final sectorId = await _userRepository.getUserSector(user.id);
 
     if (sectorId == null) {

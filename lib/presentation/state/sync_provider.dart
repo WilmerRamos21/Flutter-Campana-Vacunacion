@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-
+import 'dart:developer' as developer;
 class SyncService {
   final _supabase = Supabase.instance.client;
   bool _isSyncing = false;
@@ -12,7 +12,10 @@ class SyncService {
     Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       // Si la lista no contiene 'none', significa que recuperamos conexión
       if (!results.contains(ConnectivityResult.none)) {
-        print("🌐 ¡Conexión recuperada! Iniciando sincronización automática...");
+        developer.log(
+          "Conexión recuperada",
+          name: "SyncService",
+        );
         sincronizarRegistrosPendientes();
       }
     });
@@ -30,7 +33,10 @@ class SyncService {
       return;
     }
 
-    print("📦 Encontrados ${box.length} registros pendientes en Hive.");
+    developer.log(
+      "Encontrados ${box.length} registros pendientes",
+      name: "SyncService",
+    );
 
     // Recorremos los registros locales uno por uno de forma inversa para poder borrarlos de forma segura
     for (int i = box.length - 1; i >= 0; i--) {
@@ -56,22 +62,36 @@ class SyncService {
         // B. Insertar el registro definitivo en la tabla relacional de PostgreSQL
         await _supabase.from('vacunaciones').insert({
           'propietario_nombre': data['propietario_nombre'],
+          'propietario_cedula': data['propietario_cedula'],
+          'telefono': data['telefono'],
           'nombre_mascota': data['nombre_mascota'],
+          'tipo_mascota': data['tipo_mascota'],
+          'edad_aproximada': data['edad_aproximada'],
+          'sexo': data['sexo'],
+          'vacuna_aplicada': data['vacuna_aplicada'],
           'latitud': data['latitud'],
           'longitud': data['longitud'],
-          'foto_url': remoteFotoUrl, // Guardamos la URL de la nube, no la ruta local
+          'foto_url': remoteFotoUrl,
           'fecha_hora': data['fecha_hora'],
-          // 'vacunador_id': _supabase.auth.currentUser?.id, // Enlazar al ID del vacunador activo si aplica
+          'vacunador_id': data['vacunador_id'],
+          'sector_id': data['sector_id'],
         });
 
         // C. Si se guardó con éxito en la nube, lo borramos de la memoria local Hive
         await box.deleteAt(i);
-        print("✅ Registro sincronizado y eliminado de la cola local.");
+        developer.log(
+          "Registro recuperado y eliminado de la cola de registros",
+          name: "SyncService",
+        );
 
-      } catch (e) {
-        print("❌ Error al sincronizar el registro index $i: $e");
-        // Si falla (ej. error de timeout), se mantiene en Hive para reintentarlo luego.
-      }
+      } catch (e, stackTrace) {
+          developer.log(
+            "Error sincronizando registro $i",
+            name: "SyncService",
+            error: e,
+            stackTrace: stackTrace,
+          );
+        }
     }
 
     _isSyncing = false;
